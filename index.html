@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Productivity Hub</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+    .tabs {
+      display: flex;
+      background-color: #e0e0e0;
+    }
+    .tab {
+      flex: 1;
+      padding: 15px;
+      text-align: center;
+      cursor: pointer;
+      background-color: #e0e0e0;
+      border-right: 1px solid #ccc;
+      transition: background-color 0.3s;
+    }
+    .tab:hover, .tab.active {
+      background-color: #007bff;
+      color: #fff;
+    }
+    .tab:last-child {
+      border-right: none;
+    }
+    .tab-content {
+      display: none;
+      padding: 20px;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .error {
+      color: #d32f2f;
+      font-size: 14px;
+    }
+    .todo-list div {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .calculator-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+    .calculator-grid button {
+      padding: 15px;
+      font-size: 16px;
+    }
+    @media (max-width: 600px) {
+      .container {
+        margin: 10px;
+      }
+      .tab {
+        padding: 10px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('todo')">To-Do List</div>
+      <div class="tab" onclick="showTab('notes')">Notes</div>
+      <div class="tab" onclick="showTab('calc')">Calculator</div>
+      <div class="tab" onclick="showTab('tools')">Tools</div>
+    </div>
+    <div id="todo" class="tab-content active">
+      <h2>To-Do List</h2>
+      <div class="todo-list">
+        <div><input type="text" value="Meeting at 10 AM" disabled><button>Done</button></div>
+        <div><input type="text" value="Finish report" disabled><button>Done</button></div>
+        <div><input type="text" placeholder="Add task..."><button>Add</button></div>
+      </div>
+    </div>
+    <div id="notes" class="tab-content">
+      <h2>Quick Notes</h2>
+      <textarea rows="5" placeholder="Jot down ideas..."></textarea>
+      <button>Save Note</button>
+    </div>
+    <div id="calc" class="tab-content">
+      <h2>Calculator</h2>
+      <input type="text" placeholder="Result" disabled>
+      <div class="calculator-grid">
+        <button>7</button><button>8</button><button>9</button><button>/</button>
+        <button>4</button><button>5</button><button>6</button><button>*</button>
+        <button>1</button><button>2</button><button>3</button><button>-</button>
+        <button>0</button><button>.</button><button>=</button><button>+</button>
+      </div>
+    </div>
+    <div id="tools" class="tab-content">
+      <h2>Data Processor</h2>
+      <div>
+        <label>Input Data</label>
+        <input type="password" id="data-input" placeholder="Enter data">
+      </div>
+      <div>
+        <label>Optional Key</label>
+        <input type="text" id="key-input" placeholder="Enter optional key">
+      </div>
+      <div>
+        <label>Output</label>
+        <textarea id="output" rows="4" placeholder="Processed result"></textarea>
+      </div>
+      <div>
+        <input type="radio" id="process" name="mode" value="process" checked>
+        <label for="process">Process</label>
+        <input type="radio" id="reverse" name="mode" value="reverse">
+        <label for="reverse">Reverse</label>
+      </div>
+      <button onclick="handleProcess()">Execute</button>
+      <p id="error" class="error"></p>
+    </div>
+  </div>
+
+  <script>
+    let pyodide = null;
+
+    // Load Pyodide and Python code
+    async function loadPyodideAndRun() {
+      pyodide = await loadPyodide();
+      await pyodide.loadPackage('micropip');
+      const pythonCode = `
+import hashlib
+import base64
+import os
+
+def custom_transform(text, reverse=False):
+    if not reverse:
+        shifted = ''.join(chr((ord(c) + 3) % 128) for c in text)
+        return shifted[::-1]
+    else:
+        unreversed = text[::-1]
+        return ''.join(chr((ord(c) - 3) % 128) for c in unreversed)
+
+def encrypt_password(password, pepper="", iterations=200000):
+    transformed = custom_transform(password + pepper)
+    salt = os.urandom(16)
+    key = hashlib.pbkdf2_hmac('sha256', (password + pepper).encode('utf-8'), salt, iterations, dklen=32)
+    combined = salt + key + transformed.encode('utf-8')
+    return base64.urlsafe_b64encode(combined).decode('utf-8')
+
+def decrypt_password(encoded):
+    try:
+        decoded = base64.urlsafe_b64decode(encoded.encode('utf-8'))
+        obfuscated_password = decoded[48:].decode('utf-8')
+        return custom_transform(obfuscated_password, reverse=True)
+    except Exception as e:
+        return f"Error: {str(e)}"
+`;
+      pyodide.runPython(pythonCode);
+    }
+    loadPyodideAndRun();
+
+    // Tab switching
+    function showTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+    }
+
+    // Process encrypt/decrypt
+    async function handleProcess() {
+      const dataInput = document.getElementById('data-input').value;
+      const keyInput = document.getElementById('key-input').value;
+      const output = document.getElementById('output');
+      const error = document.getElementById('error');
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+
+      if (!dataInput) {
+        error.textContent = mode === 'process' ? 'Data input is required!' : 'Output is required!';
+        return;
+      }
+      if (!pyodide) {
+        error.textContent = 'Processing environment not loaded yet.';
+        return;
+      }
+      error.textContent = '';
+
+      if (mode === 'process') {
+        const result = await pyodide.runPythonAsync(`
+encrypt_password("${dataInput.replace(/"/g, '\\"')}", "${keyInput.replace(/"/g, '\\"')}")
+`);
+        output.value = result;
+      } else {
+        const result = await pyodide.runPythonAsync(`
+decrypt_password("${dataInput.replace(/"/g, '\\"')}")
+`);
+        output.value = result;
+      }
+    }
+  </script>
+</body>
+</html>
